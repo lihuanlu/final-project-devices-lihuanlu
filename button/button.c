@@ -30,15 +30,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 struct button_dev button_device;
 static struct class *dev_class;
 
-// File operation structure 
-struct file_operations button_fops = {
-    .owner =    THIS_MODULE,
-    .read =     button_read,
-    .open =     button_open,
-    .release =  button_release,
-	//.unlocked_ioctl = button_ioctl,
-};
-
 int button_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
@@ -99,6 +90,14 @@ out:
     return retval;
 }
 
+// File operation structure 
+struct file_operations button_fops = {
+    .owner =    THIS_MODULE,
+    .read =     button_read,
+    .open =     button_open,
+    .release =  button_release,
+	//.unlocked_ioctl = button_ioctl,
+};
 
 static int button_setup_cdev(struct button_dev *dev)
 {
@@ -138,7 +137,7 @@ int button_init_module(void)
     }
 	
 	// Creating struct class
-    if(IS_ERR(dev_class = class_create(THIS_MODULE, "button_class"))){
+    if(IS_ERR(dev_class = class_create("button_class"))){
         printk(KERN_ERR "Cannot create the struct class\n");
 		result = -1;
         goto r_class;
@@ -186,9 +185,9 @@ int button_init_module(void)
     }
 	
     // Make the GPIOs visible and direction cannot be changed by user
-    gpio_export(GPIO_16, false);
-	gpio_export(GPIO_20, false);
-	gpio_export(GPIO_21, false);
+    gpiod_export(GPIO_16, false);
+	gpiod_export(GPIO_20, false);
+	gpiod_export(GPIO_21, false);
 	
 	// Configure the GPIOs as input
 	gpio_direction_input(GPIO_16);
@@ -213,9 +212,9 @@ void button_cleanup_module(void)
 {
     dev_t devno = MKDEV(button_major, button_minor);
     
-	gpio_unexport(GPIO_16);
-	gpio_unexport(GPIO_20);
-	gpio_unexport(GPIO_21);
+	gpiod_unexport(GPIO_16);
+	gpiod_unexport(GPIO_20);
+	gpiod_unexport(GPIO_21);
     gpio_free(GPIO_16);
 	gpio_free(GPIO_20);
 	gpio_free(GPIO_21);

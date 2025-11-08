@@ -1,0 +1,18 @@
+# vim
+*.sw[a-z]
+*.un~
+Session.vim
+
+# make file
+.*
+!.gitignore
+*~
+*.o
+core
+*.ko
+*.mod.c
+Module.symvers
+modules.order
+*.mod
+*.a
+
