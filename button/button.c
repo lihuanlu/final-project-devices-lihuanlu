@@ -137,7 +137,7 @@ int button_init_module(void)
     }
 	
 	// Creating struct class
-    if(IS_ERR(dev_class = class_create("button_class"))){
+    if(IS_ERR(dev_class = class_create(THIS_MODULE,"button_class"))){
         printk(KERN_ERR "Cannot create the struct class\n");
 		result = -1;
         goto r_class;
