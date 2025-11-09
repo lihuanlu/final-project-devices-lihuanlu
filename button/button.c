@@ -78,12 +78,18 @@ ssize_t button_read(struct file *filp, char __user *buf, size_t count,
 		goto out;
 	}
 	
+	if (*f_pos > 0) { // Reach EOF
+        retval = 0;
+        goto out;
+    }
+	
 	if (copy_to_user(buf, &gpio_states, 1)) {
 		retval = -EFAULT;
 		goto out;
 	}
 	
 	retval = 1;
+	*f_pos = 1; // Increment f_pos so next read returns EOF
 	
 out:
 	mutex_unlock(&dev->lock);
