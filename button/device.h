@@ -31,5 +31,11 @@ struct button_dev
     struct cdev                 cdev;      /* Char device structure      */
 };
 
+// SPI device structure
+struct ds1722_dev {
+    struct spi_device           *spi;
+	struct cdev                 cdev;
+	dev_t                       devt;
+};
 
 #endif /* AESD_PROJECT_DEVICE_H_ */
