@@ -81,11 +81,15 @@ int main ()
 		return -1;
 	}
 	
+	printf("Read temperature...\n");
+	
 	temp_int = (int)sensor_buf[0];
 	if (sensor_buf[0] == NINE_BIT)
 		temp_decimal = 0.5;
 	else
 		temp_decimal = 0.0;
+	
+	printf("Raw value %d %d\n", sensor_buf[0], sensor_buf[1]);
 	
 	temp_value = (float)temp_int + temp_decimal;
 	printf("Temperature value: %f\n", temp_value);
