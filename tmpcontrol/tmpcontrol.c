@@ -31,7 +31,7 @@ int main ()
     ssize_t ret_byte;
 	char btn_buf[ONE_BYTE];
 	char sensor_buf[2];
-	char sensor_conf[ONE_BYTE] = CONTINUOUS;
+	char sensor_conf[ONE_BYTE] = {CONTINUOUS};
 	float temp_value = 0.0;
 	int temp_int = 0;
 	float temp_decimal = 0.0;
