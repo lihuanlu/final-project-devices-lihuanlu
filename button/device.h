@@ -1,5 +1,5 @@
 /*
- * aesdchar.h
+ * device.h
  *
  *  Created on: Oct 23, 2019
  *      Author: Dan Walkes
@@ -16,7 +16,7 @@
 #ifdef AESD_DEBUG
 #  ifdef __KERNEL__
      /* This one if debugging is on, and kernel space */
-#    define PDEBUG(fmt, args...) printk( KERN_DEBUG "aesdchar: " fmt, ## args)
+#    define PDEBUG(fmt, args...) printk( KERN_DEBUG "device: " fmt, ## args)
 #  else
      /* This one for user space */
 #    define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
