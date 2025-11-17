@@ -2,7 +2,7 @@ CROSS_COMPILE ?=
 CC := $(CROSS_COMPILE)gcc
 CFLAGS ?= -O0 -g -Wall -Werror
 LDFLAGS ?=
-LIBS ?= 
+LIBS ?= -lpthread 
 
 # Default target
 all:	tmpcontrol
