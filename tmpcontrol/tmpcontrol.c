@@ -33,6 +33,8 @@ pthread_attr_t thread_attr;
 
 volatile int terminate = 0;
 int btn_value = 0;
+int old_btn_value = 0;
+int new_btn = 0;
 int btn_fd, temp_fd;
 
 char sensor_buf[2];
@@ -40,6 +42,7 @@ float temp_value = 0.0;
 int temp_int = 0;
 float temp_decimal = 0.0;
 int new_temp = 0;
+float calibrate_value = 0.0;
 
 /**********************************************************************************
  * @name       signal_handler()
@@ -84,7 +87,7 @@ void *btn_read(void *threadp)
 	}
 		
 	while (!terminate){
-		usleep(100000);
+		usleep(300000);
 		if (terminate) break;
 		
 		ret_byte = read(btn_fd, &btn_buf, 1);
@@ -97,7 +100,13 @@ void *btn_read(void *threadp)
 			return NULL;
 		}
 		
-		btn_value = btn_buf;	
+		btn_value = btn_buf;
+		if (btn_value != old_btn_value){
+			new_btn = 1;
+			old_btn_value = btn_value;
+		}
+        else
+            new_btn = 0;			
 	}
 	
 	close(btn_fd);
@@ -151,9 +160,45 @@ void *temp_read(void *threadp)
 	pthread_exit((void *)0);
 }
 
+void temp_control(void)
+{
+	static int desired_temp = 25;
+	static int temp_set = 1;
+	
+	switch (btn_value){
+		case 1: // select
+		    temp_set = 1;
+			printf("Desired temperature set: %d\n", desired_temp);
+		break;
+		
+		case 2: // up
+			temp_set = 0;
+			desired_temp++;
+			printf("Desired temperature: %d\n", desired_temp);
+		break;
+		
+		case 4: // down
+		    temp_set = 0;
+		    desired_temp--;
+			printf("Desired temperature: %d\n", desired_temp);
+		break;
+		
+		default:
+		break;
+	}
+
+	if (temp_set){
+		if (desired_temp > calibrate_value)
+			printf("Turn on Heater.\n");
+		if (desired_temp < calibrate_value)
+			printf("Turn on AC.\n");
+	}	
+}
+
 int main ()
 {
     int ret;
+	
     cpu_set_t threadcpu;
 	
 	pthread_attr_init(&thread_attr);
@@ -177,13 +222,16 @@ int main ()
 	else printf("pthread_create successful for temp_thread\n");
 	
 	while (!terminate){
-		if (btn_value != 0)
+		if (btn_value != 0 && new_btn){
 			printf("Button value: %d\n", btn_value);
+			temp_control();
+		}	
 		
 		if (new_temp){
+			calibrate_value = temp_value + 25.0;
 			printf("Read temperature...\n");
 			printf("Raw value %d %d\n", sensor_buf[0], sensor_buf[1]);
-			printf("Temperature value: %f\n", temp_value);
+			printf("Temperature value: %.1f, Calibrated value: %0.1f\n", temp_value, calibrate_value);
 			new_temp = 0;
 		}
 	}
