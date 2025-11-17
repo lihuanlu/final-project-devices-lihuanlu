@@ -44,6 +44,8 @@ float temp_decimal = 0.0;
 int new_temp = 0;
 float calibrate_value = 0.0;
 
+int desired_temp = 25;
+int temp_set = 1;
 /**********************************************************************************
  * @name       signal_handler()
  *
@@ -76,39 +78,50 @@ void set_signal(void)
 
 void *btn_read(void *threadp)
 {
-	char btn_buf;	
+	//char btn_buf;	
+	int raw_state;
     ssize_t ret_byte;
-	
+	int last_state = 1;   // assuming 1 = not pressed
+	int stable_state = 1;
+	int debounce_counter = 0;
+
 	btn_fd = open(btn_dev, O_RDONLY);	
 	if (btn_fd == -1){
 		perror("open");
 		syslog(LOG_ERR, "open");
 		return NULL;
 	}
-		
-	while (!terminate){
-		usleep(300000);
-		if (terminate) break;
-		
-		ret_byte = read(btn_fd, &btn_buf, 1);
-		if (ret_byte != 1){
-			if (ret_byte == 0)
-				printf("EOF\n");
-			
-			perror("read");
-			syslog(LOG_ERR, "read");
-			return NULL;
-		}
-		
-		btn_value = btn_buf;
-		if (btn_value != old_btn_value){
-			new_btn = 1;
-			old_btn_value = btn_value;
-		}
-        else
-            new_btn = 0;			
-	}
 	
+	while (!terminate) {
+		usleep(10000);   // sample every 10ms
+
+		
+		ret_byte = read(btn_fd, &raw_state, 1);
+		lseek(btn_fd, 0, SEEK_SET);   // IMPORTANT: reset f_pos for next read
+
+		if (ret_byte == 1) {
+			raw_state = raw_state & 0x07;  // 3 buttons
+
+			if (raw_state == stable_state)
+				debounce_counter = 0;      // stable
+			else {
+				debounce_counter++;
+				if (debounce_counter >= 3) {   // 30ms debounce
+					stable_state = raw_state;
+					debounce_counter = 0;
+				}
+			}
+
+			// detect BUTTON PRESS only (falling edge)
+			if (last_state != stable_state && stable_state != 0) {
+				new_btn = 1;
+				btn_value = stable_state;
+			}
+
+			last_state = stable_state;
+		}
+	}
+
 	close(btn_fd);
 	pthread_exit((void *)0);
 }
@@ -162,8 +175,6 @@ void *temp_read(void *threadp)
 
 void temp_control(void)
 {
-	static int desired_temp = 25;
-	static int temp_set = 1;
 	
 	switch (btn_value){
 		case 1: // select
@@ -197,9 +208,11 @@ void temp_control(void)
 
 int main ()
 {
-    int ret;
-	
+    int ret;	
     cpu_set_t threadcpu;
+	
+	// Set up signal
+	set_signal();
 	
 	pthread_attr_init(&thread_attr);
 	CPU_ZERO(&threadcpu);    
