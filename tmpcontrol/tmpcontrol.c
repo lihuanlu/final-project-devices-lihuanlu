@@ -78,54 +78,50 @@ void set_signal(void)
 
 void *btn_read(void *threadp)
 {
-	char btn_buf;	
+    char btn_buf;
     ssize_t ret_byte;
 
-	int last_raw = 0;
-	int debounce_counter = 0;
-	int first_press_ready = 1;   // allow first press event
+    int last_raw = 0;
+    int stable_raw = 0;
+    int debounce_counter = 0;
 
-	btn_fd = open(btn_dev, O_RDONLY);	
-	if (btn_fd == -1){
-		perror("open");
-		return NULL;
-	}
-		
-	while (!terminate){
+    btn_fd = open(btn_dev, O_RDONLY);
+    if (btn_fd == -1) {
+        perror("open");
+        return NULL;
+    }
 
-		usleep(50000);   // 50ms
-		if (terminate) break;
+    while (!terminate) {
 
-		ret_byte = read(btn_fd, &btn_buf, 1);
-		if (ret_byte != 1) continue;
+        usleep(50000);  // 50ms
 
-		int raw = btn_buf & 0x07;   // active low buttons
+        ret_byte = read(btn_fd, &btn_buf, 1);
+        if (ret_byte != 1)
+            continue;
 
-		// --- Debounce core ---
-		if (raw == last_raw) {
-			debounce_counter++;
-		} else {
-			debounce_counter = 0;
-		}
+        int raw = btn_buf & 0x07;
 
-		// stable after 3 samples (~150ms)
-        if (debounce_counter >= 3) {
+        // --- debounce: check if consecutive samples are identical ---
+        if (raw == last_raw) {
+            debounce_counter++;
+        } else {
+            debounce_counter = 0;
+        }
 
-			// detect PRESS (raw != 0)
-			if (first_press_ready && raw != 0) {
-				btn_value = raw;
-				new_btn = 1;
-				first_press_ready = 0;   // block until release
-			}
+        // stable if same reading for 3 consecutive samples
+        if (debounce_counter == 3) {
 
-			// detect RELEASE → ready for next press
-			if (raw == 0) {
-				first_press_ready = 1;
-			}
-		}
+            // --- detect a stable rising edge (0 -> nonzero) ---
+            if (stable_raw == 0 && raw != 0) {
+                btn_value = raw;
+                new_btn = 1;        // trigger event
+            }
 
-		last_raw = raw;
-	}
+            stable_raw = raw; // update stable state
+        }
+
+        last_raw = raw;
+    }
 
 	close(btn_fd);
 	pthread_exit((void *)0);
