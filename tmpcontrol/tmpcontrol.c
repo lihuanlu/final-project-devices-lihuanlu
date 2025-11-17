@@ -78,50 +78,49 @@ void set_signal(void)
 
 void *btn_read(void *threadp)
 {
-	//char btn_buf;	
-	int raw_state;
+	char btn_buf;	
     ssize_t ret_byte;
-	int last_state = 1;   // assuming 1 = not pressed
-	int stable_state = 1;
 	int debounce_counter = 0;
-
+	int btn_stable = 1;
+	
 	btn_fd = open(btn_dev, O_RDONLY);	
 	if (btn_fd == -1){
 		perror("open");
 		syslog(LOG_ERR, "open");
 		return NULL;
 	}
-	
-	while (!terminate) {
-		usleep(10000);   // sample every 10ms
-
 		
-		ret_byte = read(btn_fd, &raw_state, 1);
-		lseek(btn_fd, 0, SEEK_SET);   // IMPORTANT: reset f_pos for next read
-
-		if (ret_byte == 1) {
-			raw_state = raw_state & 0x07;  // 3 buttons
-
-			if (raw_state == stable_state)
-				debounce_counter = 0;      // stable
-			else {
-				debounce_counter++;
-				if (debounce_counter >= 3) {   // 30ms debounce
-					stable_state = raw_state;
-					debounce_counter = 0;
-				}
-			}
-
-			// detect BUTTON PRESS only (falling edge)
-			if (last_state != stable_state && stable_state != 0) {
-				new_btn = 1;
-				btn_value = stable_state;
-			}
-
-			last_state = stable_state;
+	while (!terminate){
+		usleep(100000);
+		if (terminate) break;
+		
+		ret_byte = read(btn_fd, &btn_buf, 1);
+		if (ret_byte != 1){
+			perror("read");
+			syslog(LOG_ERR, "read");
+			return NULL;
 		}
+		
+		if (btn_stable){
+			debounce_counter = 0;
+			btn_value = btn_buf;
+			new_btn = 1;
+			btn_stable = 0;
+		}
+		else{
+			//btn_stable = 0;
+			new_btn = 0;
+			
+			if (btn_buf == old_btn_value){
+				debounce_counter++;
+			}
+			if (debounce_counter >= 3){
+				btn_stable = 1;
+			}
+			old_btn_value = btn_buf;
+		}		
 	}
-
+	
 	close(btn_fd);
 	pthread_exit((void *)0);
 }
@@ -184,13 +183,15 @@ void temp_control(void)
 		
 		case 2: // up
 			temp_set = 0;
-			desired_temp++;
+			if (desired_temp < 30)
+				desired_temp++;
 			printf("Desired temperature: %d\n", desired_temp);
 		break;
 		
 		case 4: // down
 		    temp_set = 0;
-		    desired_temp--;
+			if (desired_temp > 16)
+				desired_temp--;
 			printf("Desired temperature: %d\n", desired_temp);
 		break;
 		
