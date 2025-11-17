@@ -80,47 +80,53 @@ void *btn_read(void *threadp)
 {
 	char btn_buf;	
     ssize_t ret_byte;
+
+	int last_raw = 0;
 	int debounce_counter = 0;
-	int btn_stable = 1;
-	
+	int first_press_ready = 1;   // allow first press event
+
 	btn_fd = open(btn_dev, O_RDONLY);	
 	if (btn_fd == -1){
 		perror("open");
-		syslog(LOG_ERR, "open");
 		return NULL;
 	}
 		
 	while (!terminate){
-		usleep(10000);
+
+		usleep(50000);   // 50ms
 		if (terminate) break;
-		
+
 		ret_byte = read(btn_fd, &btn_buf, 1);
-		if (ret_byte != 1){
-			perror("read");
-			syslog(LOG_ERR, "read");
-			return NULL;
-		}
-		
-		if (btn_stable){
+		if (ret_byte != 1) continue;
+
+		int raw = btn_buf & 0x07;   // active low buttons
+
+		// --- Debounce core ---
+		if (raw == last_raw) {
+			debounce_counter++;
+		} else {
 			debounce_counter = 0;
-			btn_value = btn_buf;
-			new_btn = 1;
-			btn_stable = 0;
 		}
-		else{
-			//btn_stable = 0;
-			new_btn = 0;
-			
-			if (btn_buf == old_btn_value){
-				debounce_counter++;
+
+		// stable after 3 samples (~150ms)
+        if (debounce_counter >= 3) {
+
+			// detect PRESS (raw != 0)
+			if (first_press_ready && raw != 0) {
+				btn_value = raw;
+				new_btn = 1;
+				first_press_ready = 0;   // block until release
 			}
-			if (debounce_counter >= 5){
-				btn_stable = 1;
+
+			// detect RELEASE → ready for next press
+			if (raw == 0) {
+				first_press_ready = 1;
 			}
-			old_btn_value = btn_buf;
-		}		
+		}
+
+		last_raw = raw;
 	}
-	
+
 	close(btn_fd);
 	pthread_exit((void *)0);
 }
