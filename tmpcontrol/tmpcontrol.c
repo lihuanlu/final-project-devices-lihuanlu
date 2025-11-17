@@ -91,7 +91,7 @@ void *btn_read(void *threadp)
 	}
 		
 	while (!terminate){
-		usleep(100000);
+		usleep(10000);
 		if (terminate) break;
 		
 		ret_byte = read(btn_fd, &btn_buf, 1);
@@ -114,7 +114,7 @@ void *btn_read(void *threadp)
 			if (btn_buf == old_btn_value){
 				debounce_counter++;
 			}
-			if (debounce_counter >= 3){
+			if (debounce_counter >= 5){
 				btn_stable = 1;
 			}
 			old_btn_value = btn_buf;
