@@ -78,51 +78,49 @@ void set_signal(void)
 
 void *btn_read(void *threadp)
 {
-    char btn_buf;
+	char btn_buf;	
     ssize_t ret_byte;
-
-    int last_raw = 0;
-    int stable_raw = 0;
-    int debounce_counter = 0;
-
-    btn_fd = open(btn_dev, O_RDONLY);
-    if (btn_fd == -1) {
-        perror("open");
-        return NULL;
-    }
-
-    while (!terminate) {
-
-        usleep(50000);  // 50ms
-
-        ret_byte = read(btn_fd, &btn_buf, 1);
-        if (ret_byte != 1)
-            continue;
-
-        int raw = btn_buf & 0x07;
-
-        // --- debounce: check if consecutive samples are identical ---
-        if (raw == last_raw) {
-            debounce_counter++;
-        } else {
-            debounce_counter = 0;
-        }
-
-        // stable if same reading for 3 consecutive samples
-        if (debounce_counter == 3) {
-
-            // --- detect a stable rising edge (0 -> nonzero) ---
-            if (stable_raw == 0 && raw != 0) {
-                btn_value = raw;
-                new_btn = 1;        // trigger event
-            }
-
-            stable_raw = raw; // update stable state
-        }
-
-        last_raw = raw;
-    }
-
+	int debounce_counter = 0;
+	int btn_stable = 1;
+	
+	btn_fd = open(btn_dev, O_RDONLY);	
+	if (btn_fd == -1){
+		perror("open");
+		syslog(LOG_ERR, "open");
+		return NULL;
+	}
+		
+	while (!terminate){
+		usleep(10000);
+		if (terminate) break;
+		
+		ret_byte = read(btn_fd, &btn_buf, 1);
+		if (ret_byte != 1){
+			perror("read");
+			syslog(LOG_ERR, "read");
+			return NULL;
+		}
+		
+		if (btn_stable){
+			debounce_counter = 0;
+			btn_value = btn_buf;
+			new_btn = 1;
+			btn_stable = 0;
+		}
+		else{
+			new_btn = 0;
+			
+			if (btn_buf == old_btn_value){
+				debounce_counter++;
+			}
+			if (debounce_counter >= 5){
+				btn_stable = 1;
+			}
+			
+			old_btn_value = btn_buf;
+		}		
+	}
+	
 	close(btn_fd);
 	pthread_exit((void *)0);
 }
@@ -213,6 +211,8 @@ int main ()
 {
     int ret;	
     cpu_set_t threadcpu;
+	int current_state = 0;
+	int prev_state = 0;
 	
 	// Set up signal
 	set_signal();
@@ -238,9 +238,18 @@ int main ()
 	else printf("pthread_create successful for temp_thread\n");
 	
 	while (!terminate){
-		if (btn_value != 0 && new_btn){
-			printf("Button value: %d\n", btn_value);
-			temp_control();
+		if (new_btn){
+			if (btn_value != 0)
+				current_state = 1; // pressed
+			else
+				current_state = 0; // released
+			
+			if (current_state != prev_state){
+				printf("Button value: %d\n", btn_value);
+				temp_control();
+			}	
+			
+			prev_state = current_state;
 		}	
 		
 		if (new_temp){
