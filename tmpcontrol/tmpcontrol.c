@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 //#include <string.h>
 #include <syslog.h>
 #include <fcntl.h>
@@ -23,6 +24,7 @@
 #define ONE_BYTE 1
 #define CONTINUOUS 0xE2 // Continuous measurement, 9-bit resolution
 #define NINE_BIT   0x80
+#define THREAD_NUM 3
 
 const char btn_dev[] = "/dev/button";
 const char sensor_dev[] = "/dev/ds1722";
@@ -30,13 +32,14 @@ const char lcd_dev[] = "/dev/lcd1602";
 
 pthread_t btn_thread;
 pthread_t temp_thread;
-pthread_attr_t thread_attr;
+pthread_t lcd_thread;
+pthread_attr_t thread_attr[THREAD_NUM];
 
 volatile int terminate = 0;
 int btn_value = 0;
 int old_btn_value = 0;
 int new_btn = 0;
-int btn_fd, temp_fd;
+int btn_fd, temp_fd, lcd_fd;
 
 char sensor_buf[2];
 float temp_value = 0.0;
@@ -47,6 +50,21 @@ float calibrate_value = 0.0;
 
 int desired_temp = 25;
 int temp_set = 1;
+
+int new_temp2 = 0;
+int new_data = 0;
+
+char row0_str1[] = "Temp: "; // 6 characters
+char row0_str2[] = ".0C     ";  // 8 characters
+char row0_str3[] = ".5C     ";  // 8 characters
+char row1_str1[] = "Set to "; // 7 characters
+char row1_str2[] = ".0C    ";  // 7 characters
+int row0_str1_len = 6;
+int row0_str2_len = 8;
+int row0_str3_len = 8;
+int row1_str1_len = 7;
+int row1_str2_len = 7;
+
 /**********************************************************************************
  * @name       signal_handler()
  *
@@ -173,6 +191,69 @@ void *temp_read(void *threadp)
 	pthread_exit((void *)0);
 }
 
+void *lcd_write(void *threadp)
+{
+	ssize_t ret_byte;
+	uint8_t temp_ten_digit = 0;
+	uint8_t temp_one_digit = 0;
+	uint8_t desired_ten_digit = 0;
+	uint8_t desired_one_digit = 0;
+	char buffer[32];
+	int max_len = sizeof(buffer);
+	int len = 0;
+	
+	lcd_fd = open(lcd_dev, O_WRONLY);	
+	if (lcd_fd == -1){
+		perror("open");
+		syslog(LOG_ERR, "open");
+		return NULL;
+	}
+	
+	while (!terminate){
+		//sleep(3);
+		if (terminate) break;
+		
+		if (new_data || new_temp2){
+			temp_ten_digit = temp_int / 10;
+			temp_one_digit = temp_int % 10;
+			desired_ten_digit = desired_temp / 10;
+			desired_one_digit = desired_temp % 10;
+			
+			len = 0;
+			snprintf(buffer, max_len, row0_str1);
+			len += row0_str1_len;
+			snprintf(buffer+len, max_len, "%d%d", temp_ten_digit, temp_one_digit);
+			len += 2;
+			
+			if (temp_decimal == 0.0)
+				snprintf(buffer+len, max_len, row0_str2);
+			else
+			    snprintf(buffer+len, max_len, row0_str3);
+		    len += row0_str2_len;
+			
+			snprintf(buffer+len, max_len, row1_str1);
+			len += row1_str1_len;
+			snprintf(buffer+len, max_len, "%d%d", desired_ten_digit, desired_one_digit);
+			len += 2;
+			snprintf(buffer+len, max_len, row1_str2);
+			len += row1_str2_len;
+			
+			ret_byte = write(lcd_fd, buffer, max_len);
+			if (ret_byte < 0){
+				perror("write");
+				syslog(LOG_ERR, "write");
+				return NULL;
+			}
+			
+			new_data = 0;
+			new_temp2 = 0;
+		}	
+	}
+	
+	close(lcd_fd);
+	pthread_exit((void *)0);
+}	
+
 void temp_control(void)
 {
 	
@@ -218,36 +299,38 @@ int main ()
 	// Set up signal
 	set_signal();
 	
-	pthread_attr_init(&thread_attr);
-	CPU_ZERO(&threadcpu);    
-    CPU_SET(0, &threadcpu);	
-	ret = pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &threadcpu);
-	if (ret < 0) perror("pthread_attr_setaffinity_np");
+	// Assign core to each thread
+	for (int i = 0; i < THREAD_NUM; i++){
+		pthread_attr_init(&thread_attr[i]);
+		CPU_ZERO(&threadcpu);    
+		CPU_SET(i, &threadcpu);	
+		ret = pthread_attr_setaffinity_np(&thread_attr[i], sizeof(cpu_set_t), &threadcpu);
+		if (ret < 0) perror("pthread_attr_setaffinity_np");
+	}
 	
-	ret = pthread_create(&btn_thread, &thread_attr, btn_read, NULL);
+	// Create threads
+	ret = pthread_create(&btn_thread, &thread_attr[0], btn_read, NULL);
 	if (ret){
 		perror("pthread_create");
 		exit(1);
 	}
 	else printf("pthread_create successful for btn_thread\n");
 	
-	ret = pthread_create(&temp_thread, NULL, temp_read, NULL);
+	ret = pthread_create(&temp_thread, &thread_attr[1], temp_read, NULL);
 	if (ret){
 		perror("pthread_create");
 		exit(1);
 	}
 	else printf("pthread_create successful for temp_thread\n");
 	
-	//
-	int lcd_fd = open(lcd_dev, O_WRONLY);	
-	if (lcd_fd == -1){
-		perror("open");
-		syslog(LOG_ERR, "open");
-		return NULL;
+	ret = pthread_create(&lcd_thread, &thread_attr[2], lcd_write, NULL);
+	if (ret){
+		perror("pthread_create");
+		exit(1);
 	}
+	else printf("pthread_create successful for lcd_thread\n");
 	
-	write(lcd_fd, "Test", 4);
-	//
+
 	while (!terminate){
 		if (new_btn){
 			if (btn_value != 0)
@@ -257,6 +340,7 @@ int main ()
 			
 			if (current_state != prev_state){
 				printf("Button value: %d\n", btn_value);
+				new_data = 1;
 				temp_control();
 			}	
 			
@@ -277,6 +361,7 @@ int main ()
 	
 	pthread_join(btn_thread, NULL);
 	pthread_join(temp_thread, NULL);
+	pthread_join(lcd_thread, NULL);
 	
 	if (btn_fd != -1) close(btn_fd);
 	if (temp_fd != -1) close(temp_fd);
