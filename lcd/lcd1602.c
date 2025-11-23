@@ -133,7 +133,7 @@ static void LCD1602_Init(struct lcd1602_dev *dev)
 }
 
 // Probe function
-static int lcd1602_probe(struct i2c_client *client, const struct i2c_device_id *id);
+static int lcd1602_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
     struct lcd1602_dev *dev;
     int ret = 0;
