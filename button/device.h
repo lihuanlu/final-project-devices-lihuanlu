@@ -38,4 +38,10 @@ struct ds1722_dev {
 	dev_t                       devt;
 };
 
+// I2C device structure
+struct lcd1602_dev {
+    struct i2c_client           *client;
+	struct cdev                 cdev;
+	dev_t                       devt;
+};
 #endif /* AESD_PROJECT_DEVICE_H_ */

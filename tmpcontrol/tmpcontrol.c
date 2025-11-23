@@ -26,6 +26,7 @@
 
 const char btn_dev[] = "/dev/button";
 const char sensor_dev[] = "/dev/ds1722";
+const char lcd_dev[] = "/dev/lcd1602";
 
 pthread_t btn_thread;
 pthread_t temp_thread;
@@ -237,6 +238,16 @@ int main ()
 	}
 	else printf("pthread_create successful for temp_thread\n");
 	
+	//
+	int lcd_fd = open(lcd_dev, O_WRONLY);	
+	if (lcd_fd == -1){
+		perror("open");
+		syslog(LOG_ERR, "open");
+		return NULL;
+	}
+	
+	write(lcd_fd, "Test", 4);
+	//
 	while (!terminate){
 		if (new_btn){
 			if (btn_value != 0)
@@ -269,6 +280,7 @@ int main ()
 	
 	if (btn_fd != -1) close(btn_fd);
 	if (temp_fd != -1) close(temp_fd);
+	if (lcd_fd != -1) close(lcd_fd);
 	
 	return 0;
 }
