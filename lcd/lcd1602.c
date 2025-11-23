@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/printk.h>
 #include <linux/cdev.h>
+#include <linux/delay.h>
 #include "../button/device.h"
 
 #define DRIVER_NAME "lcd1602"
@@ -83,6 +84,7 @@ static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
 {
 	struct lcd1602_dev *dev = filp->private_data;
     char data[32];
+	int i;
 	
 	if (count > sizeof(data))
         count = sizeof(data);
@@ -90,7 +92,7 @@ static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
     if (copy_from_user(data, buf, count))
         return -EFAULT;
 	
-	for (int i = 0; i < count; i++){
+	for (i = 0; i < count; i++){
 		lcd_send_byte(dev->client, data[i], true);
 	}
 	
@@ -131,7 +133,7 @@ static void LCD1602_Init(struct lcd1602_dev *dev)
 }
 
 // Probe function
-static int lcd1602_probe(struct i2c_client *client)
+static int lcd1602_probe(struct i2c_client *client, const struct i2c_device_id *id);
 {
     struct lcd1602_dev *dev;
     int ret = 0;
