@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
+#include "../lcd/lcd_ioctl.h"
 
 #define ONE_BYTE 1
 #define CONTINUOUS 0xE2 // Continuous measurement, 9-bit resolution
@@ -54,16 +55,24 @@ int temp_set = 1;
 int new_temp2 = 0;
 int new_data = 0;
 
+int heater_on = 0;
+int ac_on = 0;
+
 char row0_str1[] = "Temp: "; // 6 characters
-char row0_str2[] = ".0C     ";  // 8 characters
-char row0_str3[] = ".5C     ";  // 8 characters
+char row0_str2[] = ".0C";  // 3 characters
+char row0_str3[] = ".5C";  // 3 characters
 char row1_str1[] = "Set to "; // 7 characters
 char row1_str2[] = ".0C    ";  // 7 characters
+char row1_str3[] = "Heater on       ";  // 16 characters
+char row1_str4[] = "AC on           ";  // 5 characters
+char spaces[] = "                "; //
 int row0_str1_len = 6;
-int row0_str2_len = 8;
-int row0_str3_len = 8;
+int row0_str2_len = 3;
+int row0_str3_len = 3;
 int row1_str1_len = 7;
 int row1_str2_len = 7;
+int row1_str3_len = 16;
+int row1_str4_len = 16;
 
 /**********************************************************************************
  * @name       signal_handler()
@@ -185,6 +194,7 @@ void *temp_read(void *threadp)
 		
 		temp_value = (float)temp_int + temp_decimal;
 		new_temp = 1;
+		//new_temp2 = 1;
 	}
 	
 	close(temp_fd);
@@ -198,9 +208,7 @@ void *lcd_write(void *threadp)
 	uint8_t temp_one_digit = 0;
 	uint8_t desired_ten_digit = 0;
 	uint8_t desired_one_digit = 0;
-	char buffer[32];
-	int max_len = sizeof(buffer);
-	int len = 0;
+
 	
 	lcd_fd = open(lcd_dev, O_WRONLY);	
 	if (lcd_fd == -1){
@@ -209,45 +217,60 @@ void *lcd_write(void *threadp)
 		return NULL;
 	}
 	
+	struct lcd_setcursor pos = {0, 0};
+    ioctl(lcd_fd, LCD_IOCSETCURSOR, &pos);
+	ret_byte = write(lcd_fd, row0_str1, row0_str1_len);
+	if (ret_byte < 0){
+		perror("write");
+		syslog(LOG_ERR, "write");
+		return NULL;
+	}
+			
 	while (!terminate){
 		//sleep(3);
 		if (terminate) break;
 		
-		if (new_data || new_temp2){
-			temp_ten_digit = temp_int / 10;
-			temp_one_digit = temp_int % 10;
+		if (new_temp2){
+			temp_ten_digit = (int)calibrate_value / 10;
+			temp_one_digit = (int)calibrate_value % 10;
+			
+			pos.row = 0; pos.col = 6;
+	        ioctl(lcd_fd, LCD_IOCSETCURSOR, &pos);
+			
+			ret_byte = write(lcd_fd, &temp_ten_digit, 1);
+			ret_byte = write(lcd_fd, &temp_one_digit, 1);
+			
+			if (temp_decimal == 0.0)
+				ret_byte = write(lcd_fd, row0_str2, row0_str2_len);
+			else
+			    ret_byte = write(lcd_fd, row0_str3, row0_str3_len);			
+			
+			new_temp2 = 0;
+		}	
+		
+		if (new_data){
 			desired_ten_digit = desired_temp / 10;
 			desired_one_digit = desired_temp % 10;
 			
-			len = 0;
-			snprintf(buffer, max_len, row0_str1);
-			len += row0_str1_len;
-			snprintf(buffer+len, max_len, "%d%d", temp_ten_digit, temp_one_digit);
-			len += 2;
+			pos.row = 1; pos.col = 0;
+	        ioctl(lcd_fd, LCD_IOCSETCURSOR, &pos);
 			
-			if (temp_decimal == 0.0)
-				snprintf(buffer+len, max_len, row0_str2);
-			else
-			    snprintf(buffer+len, max_len, row0_str3);
-		    len += row0_str2_len;
-			
-			snprintf(buffer+len, max_len, row1_str1);
-			len += row1_str1_len;
-			snprintf(buffer+len, max_len, "%d%d", desired_ten_digit, desired_one_digit);
-			len += 2;
-			snprintf(buffer+len, max_len, row1_str2);
-			len += row1_str2_len;
-			
-			ret_byte = write(lcd_fd, buffer, max_len);
-			if (ret_byte < 0){
-				perror("write");
-				syslog(LOG_ERR, "write");
-				return NULL;
+			if (btn_value != 1){ // set temp
+				ret_byte = write(lcd_fd, row1_str1, row1_str1_len); // Set to
+				ret_byte = write(lcd_fd, &desired_ten_digit, 1);
+				ret_byte = write(lcd_fd, &desired_one_digit, 1);
+				ret_byte = write(lcd_fd, row1_str2, row1_str2_len); // .0C
 			}
-			
+			else{ // selected
+				if (heater_on)
+					ret_byte = write(lcd_fd, row1_str3, row1_str3_len);
+				else if (ac_on)
+					ret_byte = write(lcd_fd, row1_str4, row1_str4_len);
+				else
+					ret_byte = write(lcd_fd, spaces, 16);
+			}
 			new_data = 0;
-			new_temp2 = 0;
-		}	
+		}
 	}
 	
 	close(lcd_fd);
@@ -282,10 +305,20 @@ void temp_control(void)
 	}
 
 	if (temp_set){
-		if (desired_temp > calibrate_value)
+		if (desired_temp > calibrate_value){
 			printf("Turn on Heater.\n");
-		if (desired_temp < calibrate_value)
+			heater_on = 1;
+			ac_on = 0;
+		}	
+		else if (desired_temp < calibrate_value){
 			printf("Turn on AC.\n");
+			heater_on = 0;
+			ac_on = 1;
+		}
+        else{
+			heater_on = 0;
+			ac_on = 0;
+		}
 	}	
 }
 
@@ -352,6 +385,7 @@ int main ()
 			printf("Read temperature...\n");
 			printf("Raw value %d %d\n", sensor_buf[0], sensor_buf[1]);
 			printf("Temperature value: %.1f, Calibrated value: %0.1f\n", temp_value, calibrate_value);
+			new_temp2 = 1;
 			new_temp = 0;
 		}
 	}
