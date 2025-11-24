@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
-//#include <string.h>
+#include <string.h>
 #include <syslog.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -208,7 +208,7 @@ void *lcd_write(void *threadp)
 	uint8_t temp_one_digit = 0;
 	uint8_t desired_ten_digit = 0;
 	uint8_t desired_one_digit = 0;
-
+    char buf[2];
 	
 	lcd_fd = open(lcd_dev, O_WRONLY);	
 	if (lcd_fd == -1){
@@ -234,11 +234,13 @@ void *lcd_write(void *threadp)
 			temp_ten_digit = (int)calibrate_value / 10;
 			temp_one_digit = (int)calibrate_value % 10;
 			
+			buf[0] = temp_ten_digit + '0';
+			buf[1] = temp_one_digit + '0';
+			
 			pos.row = 0; pos.col = 6;
 	        ioctl(lcd_fd, LCD_IOCSETCURSOR, &pos);
 			
-			ret_byte = write(lcd_fd, &temp_ten_digit, 1);
-			ret_byte = write(lcd_fd, &temp_one_digit, 1);
+			ret_byte = write(lcd_fd, buf, 2);
 			
 			if (temp_decimal == 0.0)
 				ret_byte = write(lcd_fd, row0_str2, row0_str2_len);
@@ -252,13 +254,15 @@ void *lcd_write(void *threadp)
 			desired_ten_digit = desired_temp / 10;
 			desired_one_digit = desired_temp % 10;
 			
+			buf[0] = desired_ten_digit + '0';
+			buf[1] = desired_one_digit + '0';
+			
 			pos.row = 1; pos.col = 0;
 	        ioctl(lcd_fd, LCD_IOCSETCURSOR, &pos);
 			
-			if (btn_value != 1){ // set temp
+			if (btn_value == 2 || btn_value == 4){ // set temp
 				ret_byte = write(lcd_fd, row1_str1, row1_str1_len); // Set to
-				ret_byte = write(lcd_fd, &desired_ten_digit, 1);
-				ret_byte = write(lcd_fd, &desired_one_digit, 1);
+				ret_byte = write(lcd_fd, buf, 2);
 				ret_byte = write(lcd_fd, row1_str2, row1_str2_len); // .0C
 			}
 			else{ // selected
@@ -322,15 +326,58 @@ void temp_control(void)
 	}	
 }
 
-int main ()
+int main (int argc, char **argv)
 {
     int ret;	
     cpu_set_t threadcpu;
 	int current_state = 0;
 	int prev_state = 0;
+	int daemon_mode = 0;
 	
 	// Set up signal
 	set_signal();
+	
+	// Check daemon mode
+	if (argc == 2 && strcmp(argv[1], "-d") == 0) daemon_mode = 1;
+	
+
+	if (daemon_mode){
+		pid_t pid;
+	
+	    pid = fork();
+	
+	    if (pid == -1){ // error
+		    perror ("fork");
+		    syslog(LOG_ERR, "Fork failed: %s", strerror(errno));
+            return -1;
+	    }
+	    if (pid > 0){
+			printf("Start in daemon\n");
+			exit(0); // parent exit
+		}
+		
+		// Child process becomes daemon
+		setsid();
+		chdir("/");
+		// Close standard file descriptors
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		close(STDERR_FILENO);
+
+		// Open /dev/null
+		int fd = open("/dev/null", O_RDWR);
+		if (fd == -1)
+		{
+			syslog(LOG_ERR, "Failed to open /dev/null: %s", strerror(errno));
+			return -1;
+		}
+
+		// Redirect standard file descriptors to /dev/null
+		dup2(fd, STDIN_FILENO);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+	}
+	
 	
 	// Assign core to each thread
 	for (int i = 0; i < THREAD_NUM; i++){

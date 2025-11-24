@@ -15,4 +15,4 @@ Module.symvers
 modules.order
 *.mod
 *.a
-tmpcontrol
+tmpcontrol/
