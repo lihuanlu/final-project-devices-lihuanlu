@@ -7,6 +7,7 @@
  * @student edit: Li-Huan Lu
  * @date 2025-11-22
  * @reference https://embetronicx.com/tutorials/linux/device-drivers/i2c-linux-device-driver-using-raspberry-pi/
+ *            https://docs.kernel.org/i2c/writing-clients.html
  *            ChatGPT
  */
 #include <linux/module.h>
@@ -19,6 +20,7 @@
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include "../button/device.h"
+#include "lcd_ioctl.h"
 
 #define DRIVER_NAME "lcd1602"
 #define LCD_ADDRESS 0x27
@@ -30,12 +32,30 @@
 
 static struct class *dev_class;
 
+static void lcd_setcursor(struct i2c_client *client, uint8_t row, uint8_t col)
+{
+	uint8_t addr_base = 0;
+	uint8_t db7_bit = 0x80; // High for set DDRAM address command
+	
+	if (row > 1) row = 1;
+    if (col > 15) col = 15;
+
+	if (row)
+		addr_base = 0x40;
+	else
+		addr_base = 0x00;
+	
+	uint8_t addr = db7_bit | addr_base | col;
+	lcd_send_byte(client, addr, false);
+}
+
 // This function writes the data into the I2C client
 static int lcd_i2c_write(struct i2c_client *client, uint8_t data)
 {
     return i2c_master_send(client, &data, 1);
 }
 
+// Toggle enable pin of the LCD module to latch data
 static void lcd_pulse_enable(struct i2c_client *client, uint8_t data)
 {
     lcd_i2c_write(client, data | LCD_EN);
@@ -44,6 +64,7 @@ static void lcd_pulse_enable(struct i2c_client *client, uint8_t data)
     udelay(50);
 }
 
+// Combine nibble with RS, R/W = 0, BL pins. Send through I2C.
 static void lcd_send_nibble(struct i2c_client *client, uint8_t nibble, bool rs)
 {
     uint8_t data = 0;
@@ -55,18 +76,21 @@ static void lcd_send_nibble(struct i2c_client *client, uint8_t nibble, bool rs)
     if (rs)
         data |= LCD_RS;
     
+	// Enable backlight
 	data |= LCD_BL;
 	
     // Pulse enable to latch
     lcd_pulse_enable(client, data);
 }
 
+// Combine two nibbles into one byte. Send through I2C.
 static void lcd_send_byte(struct i2c_client *client, uint8_t value, bool rs)
 {
     lcd_send_nibble(client, (value >> 4) & 0x0F, rs); // high nibble
     lcd_send_nibble(client, value & 0x0F, rs);        // low nibble
 }
 
+// Char device open function
 static int lcd1602_open(struct inode *inode, struct file *f)
 {
     PDEBUG("open");
@@ -79,13 +103,15 @@ static int lcd1602_open(struct inode *inode, struct file *f)
     return 0;
 }
 
+// Char device write function
 static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
                             size_t count, loff_t *off)
 {
 	struct lcd1602_dev *dev = filp->private_data;
-    char data[32];
+    char data[32]; // 16 bytes per row
 	int i;
 	
+	// Truncate user buffer into 32 bytes
 	if (count > sizeof(data))
         count = sizeof(data);
 
@@ -99,12 +125,38 @@ static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
 	return count;
 }
 
+
+long lcd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	struct lcd1602_dev *dev = filp->private_data;
+	int retval = 0;
+
+	if (_IOC_TYPE(cmd) != LCD_IOC_MAGIC) return -ENOTTY;
+	if (_IOC_NR(cmd) > LCD_IOC_MAXNR) return -ENOTTY;
+    
+    switch(cmd) {
+        caseLCD_IOCSETCURSOR: {
+		    struct lcd_setcursor pos;
+			if (copy_from_user(&pos, (const void __user *)arg, sizeof(pos)) != 0)
+				retval = EFAULT;
+			else 
+				lcd_setcursor(dev->client, pos.row, pos.col);
+		    break;
+		}
+		
+		default: // redundant, as cmd was checked against MAXNR
+		    return -ENOTTY;
+    }	
+
+    return retval;	
+}
+
 // File operation structure 
 struct file_operations lcd1602_fops = {
     .owner =    THIS_MODULE,
 	.open  =    lcd1602_open,
-    //.read  =    lcd1602_read,
     .write =    lcd1602_write,
+	.unlocked_ioctl = lcd_ioctl,
 };
 
 
