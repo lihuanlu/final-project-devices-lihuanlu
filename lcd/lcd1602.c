@@ -103,6 +103,14 @@ static int lcd1602_open(struct inode *inode, struct file *f)
     return 0;
 }
 
+// Char device release function
+static int lcd1602_release(struct inode *inode, struct file *filp)
+{
+    PDEBUG("release");
+
+    return 0;
+}
+
 // Char device write function
 static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
                             size_t count, loff_t *off)
@@ -135,10 +143,10 @@ long lcd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	if (_IOC_NR(cmd) > LCD_IOC_MAXNR) return -ENOTTY;
     
     switch(cmd) {
-        caseLCD_IOCSETCURSOR: {
+        case LCD_IOCSETCURSOR: {
 		    struct lcd_setcursor pos;
 			if (copy_from_user(&pos, (const void __user *)arg, sizeof(pos)) != 0)
-				retval = EFAULT;
+				retval = -EFAULT;
 			else 
 				lcd_setcursor(dev->client, pos.row, pos.col);
 		    break;
@@ -156,6 +164,7 @@ struct file_operations lcd1602_fops = {
     .owner =    THIS_MODULE,
 	.open  =    lcd1602_open,
     .write =    lcd1602_write,
+	.release = lcd1602_release,
 	.unlocked_ioctl = lcd_ioctl,
 };
 
@@ -258,6 +267,7 @@ static int lcd1602_remove(struct i2c_client *client)
 	device_destroy(dev_class, dev->devt);
     cdev_del(&dev->cdev);
     unregister_chrdev_region(dev->devt, 1);
+	class_destroy(dev_class);
 	
 	PDEBUG("%s: removing lcd1602 device\n", DRIVER_NAME);	
 	
