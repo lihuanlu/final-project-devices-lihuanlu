@@ -1,0 +1,17 @@
+#!/bin/sh
+
+case "$1" in
+    start)
+	    echo "Starting tmpcontrol"
+		start-stop-daemon -S -n tmpcontrol -a /usr/bin/tmpcontrol -- -d
+		;;
+	stop)
+	    echo "Stopping tmpcontrol"
+		start-stop-daemon -K -n tmpcontrol
+		;;
+	*)
+	    echo "Usage: $0 {start|stop}"
+	exit 1
+esac
+
+exit 0
