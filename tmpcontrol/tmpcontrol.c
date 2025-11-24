@@ -57,6 +57,7 @@ int new_data = 0;
 
 int heater_on = 0;
 int ac_on = 0;
+int is_setting = 0;
 
 char row0_str1[] = "Temp: "; // 6 characters
 char row0_str2[] = ".0C";  // 3 characters
@@ -260,7 +261,7 @@ void *lcd_write(void *threadp)
 			pos.row = 1; pos.col = 0;
 	        ioctl(lcd_fd, LCD_IOCSETCURSOR, &pos);
 			
-			if (btn_value == 2 || btn_value == 4){ // set temp
+			if (is_setting){ // setting temp
 				ret_byte = write(lcd_fd, row1_str1, row1_str1_len); // Set to
 				ret_byte = write(lcd_fd, buf, 2);
 				ret_byte = write(lcd_fd, row1_str2, row1_str2_len); // .0C
@@ -420,6 +421,10 @@ int main (int argc, char **argv)
 			
 			if (current_state != prev_state){
 				printf("Button value: %d\n", btn_value);
+				
+				if (btn_value == 2 || btn_value == 4) is_setting = 1;
+				if (btn_value == 1) is_setting = 0;
+				
 				new_data = 1;
 				temp_control();
 			}	
