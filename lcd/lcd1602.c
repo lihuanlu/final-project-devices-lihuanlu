@@ -32,23 +32,6 @@
 
 static struct class *dev_class;
 
-static void lcd_setcursor(struct i2c_client *client, uint8_t row, uint8_t col)
-{
-	uint8_t addr_base = 0;
-	uint8_t db7_bit = 0x80; // High for set DDRAM address command
-	
-	if (row > 1) row = 1;
-    if (col > 15) col = 15;
-
-	if (row)
-		addr_base = 0x40;
-	else
-		addr_base = 0x00;
-	
-	uint8_t addr = db7_bit | addr_base | col;
-	lcd_send_byte(client, addr, false);
-}
-
 // This function writes the data into the I2C client
 static int lcd_i2c_write(struct i2c_client *client, uint8_t data)
 {
@@ -88,6 +71,23 @@ static void lcd_send_byte(struct i2c_client *client, uint8_t value, bool rs)
 {
     lcd_send_nibble(client, (value >> 4) & 0x0F, rs); // high nibble
     lcd_send_nibble(client, value & 0x0F, rs);        // low nibble
+}
+
+static void lcd_setcursor(struct i2c_client *client, uint8_t row, uint8_t col)
+{
+	uint8_t addr_base = 0;
+	uint8_t db7_bit = 0x80; // High for set DDRAM address command
+	
+	if (row > 1) row = 1;
+    if (col > 15) col = 15;
+
+	if (row)
+		addr_base = 0x40;
+	else
+		addr_base = 0x00;
+	
+	uint8_t addr = db7_bit | addr_base | col;
+	lcd_send_byte(client, addr, false);
 }
 
 // Char device open function
