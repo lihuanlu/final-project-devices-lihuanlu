@@ -58,7 +58,7 @@ static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
     if (ret < 0)
         return ret;
 
-    *val = rx[0]; // temperature value in second byte
+    *val = rx[1]; // temperature value in second byte
     return 0;	
 }
 
