@@ -436,10 +436,14 @@ int main (int argc, char **argv)
 			printf("Raw value %d %d\n", sensor_buf[0], sensor_buf[1]);
 			printf("Temperature value: %.1f\n", temp_value);
 			
-			if (temp_value >= desired_temp)
+			if (temp_value >= desired_temp && heater_on){
 				heater_on = 0;
-			else if (temp_value <= desired_temp)
+				new_data = 1;
+			}
+			else if (temp_value <= desired_temp && ac_on){
 				ac_on = 0;
+				new_data = 1;
+			}
 			
 			new_temp_lcd = 1;
 			new_temp = 0;
