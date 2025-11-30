@@ -81,10 +81,11 @@ static ssize_t ds1722_read(struct file *filp, char __user *buf,
 	
 	struct ds1722_dev *dev = filp->private_data; 
 	
-	retval = ds1722_spi_read(dev->spi, TEMP_MSB, &byte_read[0]);
+	retval = ds1722_spi_read(dev->spi, TEMP_LSB, &byte_read[1]);
 	if (retval < 0)
 		return retval;
-	retval = ds1722_spi_read(dev->spi, TEMP_LSB, &byte_read[1]);
+	
+	retval = ds1722_spi_read(dev->spi, TEMP_MSB, &byte_read[0]);
 	if (retval < 0)
 		return retval;
 	
