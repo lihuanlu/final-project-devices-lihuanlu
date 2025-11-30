@@ -43,34 +43,34 @@ static int ds1722_open(struct inode *inode, struct file *f)
 static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
 {
     int ret;
-    uint8_t tx[2] = {reg, DUMMY}; // send address, then dummy byte
-    uint8_t rx[2] = {0};
+	uint8_t tx_cmd[1] = {reg};     // data register 0x02 or 0x01
+	uint8_t tx_dummy[1] = {DUMMY}; // transfer dummy byte to receive data
+    uint8_t rx_data[1] = {0};      // buffer to store read back data
 
     struct spi_transfer xfers[] = {
-        {
-            .tx_buf = tx,
-            .len = 2,
-            .rx_buf = rx,
-        }
+        {.tx_buf = tx_cmd, .len = 1,},
+		{.tx_buf = tx_dummy, .rx_buf = rx_data, .len = 1,}
     };
 
-    ret = spi_sync_transfer(spi, xfers, 1);
+    ret = spi_sync_transfer(spi, xfers, 2);
     if (ret < 0)
         return ret;
 
-    *val = rx[1]; // temperature value in second byte
+    *val = rx_data[0]; // temperature value
     return 0;	
 }
 
 static int ds1722_spi_write_config(struct spi_device *spi, uint8_t config)
 {
-    uint8_t tx[2] = {WR_CONFIG, config }; // write to config register
-    struct spi_transfer xfer = {
-        .tx_buf = tx,
-        .len = 2,
+    uint8_t tx_cmd[1] = {WR_CONFIG}; // config register 0x80
+	uint8_t tx_data[1] = {config}; // configuration value
+	
+    struct spi_transfer xfer[] = {
+        {.tx_buf = tx_cmd, .len = 1,},
+		{.tx_buf = tx_data, .len = 1,}
     };
 
-    return spi_sync_transfer(spi, &xfer, 1);
+    return spi_sync_transfer(spi, xfer, 2);
 }
 
 static ssize_t ds1722_read(struct file *filp, char __user *buf,
@@ -131,7 +131,6 @@ static int ds1722_probe(struct spi_device *spi)
     struct ds1722_dev *dev;
     int ret = 0;
 
-	
     PDEBUG("%s: probing DS1722 device\n", DRIVER_NAME);
 
     // Allocate driver dev
@@ -142,6 +141,11 @@ static int ds1722_probe(struct spi_device *spi)
     dev->spi = spi;
     spi_set_drvdata(spi, dev);
     
+	// Explicitly set SPI Mode 1
+	// Additional step, device tree already sets for Mode 1
+    spi->mode = SPI_MODE_1;
+    spi_setup(spi);
+	
 	// Allocate char device number
     ret = alloc_chrdev_region(&dev->devt, 0, 1, DRIVER_NAME);
     if (ret)
