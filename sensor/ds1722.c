@@ -48,7 +48,7 @@ static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
     uint8_t rx_data[1] = {0};      // buffer to store read back data
 
     struct spi_transfer xfers[] = {
-        {.tx_buf = tx_cmd, .len = 1,},
+        {.tx_buf = tx_cmd, .len = 1, .delay_usecs = 10,},
 		{.tx_buf = tx_dummy, .rx_buf = rx_data, .len = 1,}
     };
 
@@ -66,7 +66,7 @@ static int ds1722_spi_write_config(struct spi_device *spi, uint8_t config)
 	uint8_t tx_data[1] = {config}; // configuration value
 	
     struct spi_transfer xfer[] = {
-        {.tx_buf = tx_cmd, .len = 1,},
+        {.tx_buf = tx_cmd, .len = 1, .delay_usecs = 10,},
 		{.tx_buf = tx_data, .len = 1,}
     };
 
