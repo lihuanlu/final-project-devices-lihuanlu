@@ -43,34 +43,34 @@ static int ds1722_open(struct inode *inode, struct file *f)
 static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
 {
     int ret;
-	uint8_t tx_cmd[1] = {reg};     // data register 0x02 or 0x01
-	uint8_t tx_dummy[1] = {DUMMY}; // transfer dummy byte to receive data
-    uint8_t rx_data[1] = {0};      // buffer to store read back data
+    uint8_t tx[2] = {reg, DUMMY}; // send address, then dummy byte
+    uint8_t rx[2] = {0};
 
     struct spi_transfer xfers[] = {
-        {.tx_buf = tx_cmd, .len = 1, .delay_usecs = 10,},
-		{.tx_buf = tx_dummy, .rx_buf = rx_data, .len = 1,}
+        {
+            .tx_buf = tx,
+            .len = 2,
+            .rx_buf = rx,
+        }
     };
 
-    ret = spi_sync_transfer(spi, xfers, 2);
+    ret = spi_sync_transfer(spi, xfers, 1);
     if (ret < 0)
         return ret;
 
-    *val = rx_data[0]; // temperature value
+    *val = rx[0]; // temperature value in second byte
     return 0;	
 }
 
 static int ds1722_spi_write_config(struct spi_device *spi, uint8_t config)
 {
-    uint8_t tx_cmd[1] = {WR_CONFIG}; // config register 0x80
-	uint8_t tx_data[1] = {config}; // configuration value
-	
-    struct spi_transfer xfer[] = {
-        {.tx_buf = tx_cmd, .len = 1, .delay_usecs = 10,},
-		{.tx_buf = tx_data, .len = 1,}
+    uint8_t tx[2] = {WR_CONFIG, config }; // write to config register
+    struct spi_transfer xfer = {
+        .tx_buf = tx,
+        .len = 2,
     };
 
-    return spi_sync_transfer(spi, xfer, 2);
+    return spi_sync_transfer(spi, &xfer, 1);
 }
 
 static ssize_t ds1722_read(struct file *filp, char __user *buf,
