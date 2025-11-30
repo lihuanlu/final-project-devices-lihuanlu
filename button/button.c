@@ -16,7 +16,6 @@
 #include <linux/fs.h> // file_operations
 #include <linux/gpio.h>
 #include "device.h"
-//#include "aesd_ioctl.h"
 #define GPIO_16 (16) // select
 #define GPIO_20 (20) // up
 #define GPIO_21 (21) // down
@@ -33,7 +32,6 @@ static struct class *dev_class;
 int button_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
-    //handle open
 	
 	struct button_dev *dev; // device information
 	
@@ -46,8 +44,6 @@ int button_open(struct inode *inode, struct file *filp)
 int button_release(struct inode *inode, struct file *filp)
 {
     PDEBUG("release");
-
-    //handle release
 
     return 0;
 }
@@ -77,14 +73,7 @@ ssize_t button_read(struct file *filp, char __user *buf, size_t count,
 		retval = -EFAULT;
 		goto out;
 	}
-	
-	/*
-	if (*f_pos > 0) { // Reach EOF
-        retval = 0;
-        goto out;
-    }
-	*/
-	
+
 	if (copy_to_user(buf, &gpio_states, 1)) {
 		retval = -EFAULT;
 		goto out;
@@ -104,7 +93,6 @@ struct file_operations button_fops = {
     .read =     button_read,
     .open =     button_open,
     .release =  button_release,
-	//.unlocked_ioctl = button_ioctl,
 };
 
 static int button_setup_cdev(struct button_dev *dev)
@@ -231,7 +219,6 @@ void button_cleanup_module(void)
     cdev_del(&button_device.cdev);
     unregister_chrdev_region(devno, 1);
 }
-
 
 module_init(button_init_module);
 module_exit(button_cleanup_module);

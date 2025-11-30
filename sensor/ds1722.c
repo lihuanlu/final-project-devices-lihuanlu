@@ -143,8 +143,8 @@ static int ds1722_probe(struct spi_device *spi)
     
 	// Explicitly set SPI Mode 1
 	// Additional step, device tree already sets for Mode 1
-    spi->mode = SPI_MODE_1;
-    spi_setup(spi);
+    //spi->mode = SPI_MODE_1;
+    //spi_setup(spi);
 	
 	// Allocate char device number
     ret = alloc_chrdev_region(&dev->devt, 0, 1, DRIVER_NAME);
