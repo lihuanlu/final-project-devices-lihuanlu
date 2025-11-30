@@ -47,26 +47,25 @@ float temp_value = 0.0;
 int temp_int = 0;
 float temp_decimal = 0.0;
 int new_temp = 0;
-float calibrate_value = 0.0;
 
 int desired_temp = 25;
 int temp_set = 1;
 
-int new_temp2 = 0;
+int new_temp_lcd = 0;
 int new_data = 0;
 
 int heater_on = 0;
 int ac_on = 0;
 int is_setting = 0;
 
-char row0_str1[] = "Temp: "; // 6 characters
-char row0_str2[] = ".0C";  // 3 characters
-char row0_str3[] = ".5C";  // 3 characters
-char row1_str1[] = "Set to "; // 7 characters
-char row1_str2[] = ".0C    ";  // 7 characters
+char row0_str1[] = "Temp: ";            // 6 characters
+char row0_str2[] = ".0C";               // 3 characters
+char row0_str3[] = ".5C";               // 3 characters
+char row1_str1[] = "Set to ";           // 7 characters
+char row1_str2[] = ".0C    ";           // 7 characters
 char row1_str3[] = "Heater on       ";  // 16 characters
 char row1_str4[] = "AC on           ";  // 5 characters
-char spaces[] = "                "; //
+char spaces[] = "                ";     //
 int row0_str1_len = 6;
 int row0_str2_len = 3;
 int row0_str3_len = 3;
@@ -195,7 +194,6 @@ void *temp_read(void *threadp)
 		
 		temp_value = (float)temp_int + temp_decimal;
 		new_temp = 1;
-		//new_temp2 = 1;
 	}
 	
 	close(temp_fd);
@@ -228,13 +226,13 @@ void *lcd_write(void *threadp)
 	}
 			
 	while (!terminate){
-		//sleep(3);
 		if (terminate) break;
 		
-		if (new_temp2){
-			temp_ten_digit = (int)calibrate_value / 10;
-			temp_one_digit = (int)calibrate_value % 10;
+		if (new_temp_lcd){
+			temp_ten_digit = (int)temp_value / 10;
+			temp_one_digit = (int)temp_value % 10;
 			
+			// convert to ASCII, add zero base
 			buf[0] = temp_ten_digit + '0';
 			buf[1] = temp_one_digit + '0';
 			
@@ -248,7 +246,7 @@ void *lcd_write(void *threadp)
 			else
 			    ret_byte = write(lcd_fd, row0_str3, row0_str3_len);			
 			
-			new_temp2 = 0;
+			new_temp_lcd = 0;
 		}	
 		
 		if (new_data){
@@ -284,7 +282,7 @@ void *lcd_write(void *threadp)
 
 void temp_control(void)
 {
-	
+	// Check which button is pressed and take actions
 	switch (btn_value){
 		case 1: // select
 		    temp_set = 1;
@@ -308,14 +306,15 @@ void temp_control(void)
 		default:
 		break;
 	}
-
+    
+	// Control AC/Heater after user confirms the desired temperature
 	if (temp_set){
-		if (desired_temp > calibrate_value){
+		if (desired_temp > temp_value){
 			printf("Turn on Heater.\n");
 			heater_on = 1;
 			ac_on = 0;
 		}	
-		else if (desired_temp < calibrate_value){
+		else if (desired_temp < temp_value){
 			printf("Turn on AC.\n");
 			heater_on = 0;
 			ac_on = 1;
@@ -433,11 +432,16 @@ int main (int argc, char **argv)
 		}	
 		
 		if (new_temp){
-			calibrate_value = temp_value + 25.0;
 			printf("Read temperature...\n");
 			printf("Raw value %d %d\n", sensor_buf[0], sensor_buf[1]);
-			printf("Temperature value: %.1f, Calibrated value: %0.1f\n", temp_value, calibrate_value);
-			new_temp2 = 1;
+			printf("Temperature value: %.1f\n", temp_value);
+			
+			if (temp_value >= desired_temp)
+				heater_on = 0;
+			else if (temp_value <= desired_temp)
+				ac_on = 0;
+			
+			new_temp_lcd = 1;
 			new_temp = 0;
 		}
 	}
