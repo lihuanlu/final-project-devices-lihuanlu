@@ -28,24 +28,29 @@
 
 static struct class *dev_class;
 
+// Open function
 static int ds1722_open(struct inode *inode, struct file *f)
 {
     PDEBUG("open");
 	
 	struct ds1722_dev *dev;
-
+    
+	// Calculate and store the pointer that points to ds1722_dev
     dev = container_of(inode->i_cdev, struct ds1722_dev, cdev);
     f->private_data = dev;
 
     return 0;
 }
 
+// SPI read function
+// First send the address to read, and send a dummy byte to get the value on MISO
 static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
 {
     int ret;
     uint8_t tx[2] = {reg, DUMMY}; // send address, then dummy byte
     uint8_t rx[2] = {0};
-
+    
+	// SPI read/write buffer structure
     struct spi_transfer xfers[] = {
         {
             .tx_buf = tx,
@@ -53,7 +58,8 @@ static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
             .rx_buf = rx,
         }
     };
-
+    
+	// 0 when success, 1 item to transfer (1 CS pin pulse)
     ret = spi_sync_transfer(spi, xfers, 1);
     if (ret < 0)
         return ret;
@@ -62,17 +68,23 @@ static int ds1722_spi_read(struct spi_device *spi, uint8_t reg, uint8_t *val)
     return 0;	
 }
 
+// SPI write function to write configuration
 static int ds1722_spi_write_config(struct spi_device *spi, uint8_t config)
 {
-    uint8_t tx[2] = {WR_CONFIG, config }; // write to config register
-    struct spi_transfer xfer = {
+    uint8_t tx[2] = {WR_CONFIG, config}; // write to config register
+    
+	// SPI read/write buffer structure
+	struct spi_transfer xfer = {
         .tx_buf = tx,
         .len = 2,
     };
-
+    
+	// 0 when success, 1 item to transfer (1 CS pin pulse)
     return spi_sync_transfer(spi, &xfer, 1);
 }
 
+// Read function
+// Always read from the LSB and MSB register
 static ssize_t ds1722_read(struct file *filp, char __user *buf,
                            size_t count, loff_t *off)
 {
@@ -81,6 +93,7 @@ static ssize_t ds1722_read(struct file *filp, char __user *buf,
 	
 	struct ds1722_dev *dev = filp->private_data; 
 	
+	// Perform two spi read to get the temperature value
 	retval = ds1722_spi_read(dev->spi, TEMP_LSB, &byte_read[1]);
 	if (retval < 0)
 		return retval;
@@ -89,32 +102,38 @@ static ssize_t ds1722_read(struct file *filp, char __user *buf,
 	if (retval < 0)
 		return retval;
 	
+	// Copy the buffer to user space
 	if (copy_to_user(buf, byte_read, 2)) {
 		retval = -EFAULT;
 		return retval;
 	}
 	
-	// success
+	// When success, two bytes are read
 	retval = 2;
 	
 	return retval;
 }
 
+// Write function
+// Only for writing to the configuration register
 static ssize_t ds1722_write(struct file *filp, const char __user *buf,
                             size_t count, loff_t *off)
 {
 	struct ds1722_dev *dev = filp->private_data;
     uint8_t config;
 	
+	// The configuration should be 1 byte
 	if (count < 1)
         return -EINVAL;
 
     if (copy_from_user(&config, buf, 1))
         return -EFAULT;
 	
+	// Send configuration
 	if (ds1722_spi_write_config(dev->spi, config) < 0)
         return -EIO;
 	
+	// 1 byte is written
 	return 1;
 }
 
@@ -135,10 +154,13 @@ static int ds1722_probe(struct spi_device *spi)
     PDEBUG("%s: probing DS1722 device\n", DRIVER_NAME);
 
     // Allocate driver dev
+	// no kfree needed, kernel handles cleanup
     dev = devm_kzalloc(&spi->dev, sizeof(*dev), GFP_KERNEL);
     if (!dev)
         return -ENOMEM;
-
+    
+	// pointer to generic SPI device structure
+	// stores a pointer to dev
     dev->spi = spi;
     spi_set_drvdata(spi, dev);
     
@@ -152,12 +174,12 @@ static int ds1722_probe(struct spi_device *spi)
     if (ret)
         return ret;
 
-	
-	// Initialize cdev
+	// Initialize a cdev structure
 	cdev_init(&dev->cdev, &ds1722_fops);
     dev->cdev.owner = THIS_MODULE;
-
-    ret = cdev_add (&dev->cdev, dev->devt, 1);
+    
+	// Add a char device to the system
+    ret = cdev_add(&dev->cdev, dev->devt, 1);
     if (ret) {
         printk(KERN_ERR "Error %d adding ds1722 cdev", ret);
 		goto err_chrdev;
@@ -196,6 +218,7 @@ err_chrdev:
 // Remove function
 static int ds1722_remove(struct spi_device *spi)
 {
+	// Retrieve pointer
 	struct ds1722_dev *dev = spi_get_drvdata(spi);
 	
 	device_destroy(dev_class, dev->devt);
@@ -224,7 +247,7 @@ static struct spi_driver ds1722_driver = {
     .remove = ds1722_remove,
 };
 
-// Register driver
+// Register driver with the SPI subsystem
 module_spi_driver(ds1722_driver);
 
 MODULE_AUTHOR("Li-Huan Lu");

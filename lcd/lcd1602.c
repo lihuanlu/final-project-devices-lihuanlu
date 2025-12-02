@@ -32,19 +32,21 @@
 
 static struct class *dev_class;
 
+// I2C write function
 // This function writes the data into the I2C client
 static int lcd_i2c_write(struct i2c_client *client, uint8_t data)
 {
-    return i2c_master_send(client, &data, 1);
+    // Returns negative errno, or else the number of bytes written.
+	return i2c_master_send(client, &data, 1);
 }
 
 // Toggle enable pin of the LCD module to latch data
 static void lcd_pulse_enable(struct i2c_client *client, uint8_t data)
 {
-    lcd_i2c_write(client, data | LCD_EN);
-    udelay(1);
-    lcd_i2c_write(client, data & ~LCD_EN);
-    udelay(50);
+    lcd_i2c_write(client, data | LCD_EN);  // Assert Enable
+    udelay(1);  // Enable pulse width min: 140ns
+    lcd_i2c_write(client, data & ~LCD_EN); // Deassert Enable
+    udelay(50); // Command execution time
 }
 
 // Combine nibble with RS, R/W = 0, BL pins. Send through I2C.
@@ -73,14 +75,18 @@ static void lcd_send_byte(struct i2c_client *client, uint8_t value, bool rs)
     lcd_send_nibble(client, value & 0x0F, rs);        // low nibble
 }
 
+// LCD set cursor function
 static void lcd_setcursor(struct i2c_client *client, uint8_t row, uint8_t col)
 {
 	uint8_t addr_base = 0;
 	uint8_t db7_bit = 0x80; // High for set DDRAM address command
 	
+	// Boundary check
 	if (row > 1) row = 1;
     if (col > 15) col = 15;
-
+    
+	// row 0: 0x00 - 0x0F
+	// row 1: 0x40 - 0x4F
 	if (row)
 		addr_base = 0x40;
 	else
@@ -96,7 +102,8 @@ static int lcd1602_open(struct inode *inode, struct file *f)
     PDEBUG("open");
 	
 	struct lcd1602_dev *dev;
-
+    
+	// Calculate and store the pointer that points to lcd1602_dev
     dev = container_of(inode->i_cdev, struct lcd1602_dev, cdev);
     f->private_data = dev;
 
@@ -107,7 +114,7 @@ static int lcd1602_open(struct inode *inode, struct file *f)
 static int lcd1602_release(struct inode *inode, struct file *filp)
 {
     PDEBUG("release");
-
+    // No cleanup needed.
     return 0;
 }
 
@@ -116,10 +123,10 @@ static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
                             size_t count, loff_t *off)
 {
 	struct lcd1602_dev *dev = filp->private_data;
-    char data[32]; // 16 bytes per row
+    char data[16]; // 16 bytes per row
 	int i;
 	
-	// Truncate user buffer into 32 bytes
+	// Truncate user buffer into 16 bytes
 	if (count > sizeof(data))
         count = sizeof(data);
 
@@ -133,7 +140,8 @@ static ssize_t lcd1602_write(struct file *filp, const char __user *buf,
 	return count;
 }
 
-
+// LCD ioctl function
+// Only for set cursor
 long lcd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct lcd1602_dev *dev = filp->private_data;
@@ -262,6 +270,7 @@ err_chrdev:
 // Remove function
 static int lcd1602_remove(struct i2c_client *client)
 {
+	// Retrieve pointer
 	struct lcd1602_dev *dev = i2c_get_clientdata(client);
 	
 	device_destroy(dev_class, dev->devt);

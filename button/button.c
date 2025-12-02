@@ -29,25 +29,29 @@ MODULE_LICENSE("Dual BSD/GPL");
 struct button_dev button_device;
 static struct class *dev_class;
 
+// Char device open function
 int button_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
 	
-	struct button_dev *dev; // device information
+	struct button_dev *dev;
 	
+	// Calculate and store the pointer that points to button_dev
 	dev = container_of(inode->i_cdev, struct button_dev, cdev);
 	filp->private_data = dev;
 	
     return 0;
 }
 
+// Char device release function
 int button_release(struct inode *inode, struct file *filp)
 {
     PDEBUG("release");
-
+    // No cleanup needed.
     return 0;
 }
 
+// Char device read function
 ssize_t button_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
@@ -69,6 +73,7 @@ ssize_t button_read(struct file *filp, char __user *buf, size_t count,
 	if (mutex_lock_interruptible(&dev->lock))
 		return -ERESTARTSYS;
 	
+	// Always read 1 byte
 	if (count < 1) {
 		retval = -EFAULT;
 		goto out;
@@ -95,6 +100,7 @@ struct file_operations button_fops = {
     .release =  button_release,
 };
 
+// Char device setup function
 static int button_setup_cdev(struct button_dev *dev)
 {
     int err, devno = MKDEV(button_major, button_minor);
@@ -109,11 +115,12 @@ static int button_setup_cdev(struct button_dev *dev)
     return err;
 }
 
-
+// Init function
 int button_init_module(void)
 {
     dev_t dev = 0;
     int result;
+	
     result = alloc_chrdev_region(&dev, button_minor, 1,
             "button");
     button_major = MAJOR(dev);
@@ -204,6 +211,7 @@ r_class:
     return result;
 }
 
+// Cleanup function
 void button_cleanup_module(void)
 {
     dev_t devno = MKDEV(button_major, button_minor);

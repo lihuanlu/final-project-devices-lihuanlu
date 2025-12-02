@@ -27,37 +27,45 @@
 #define NINE_BIT   0x80
 #define THREAD_NUM 3
 
+// Device file name
 const char btn_dev[] = "/dev/button";
 const char sensor_dev[] = "/dev/ds1722";
 const char lcd_dev[] = "/dev/lcd1602";
 
+// Pthread variables
 pthread_t btn_thread;
 pthread_t temp_thread;
 pthread_t lcd_thread;
 pthread_attr_t thread_attr[THREAD_NUM];
 
+// Signal flag
 volatile int terminate = 0;
+
+// File descriptors
+int btn_fd, temp_fd, lcd_fd;
+
+// Button device
 int btn_value = 0;
 int old_btn_value = 0;
 int new_btn = 0;
-int btn_fd, temp_fd, lcd_fd;
 
+// Sensor device
 char sensor_buf[2];
 float temp_value = 0.0;
 int temp_int = 0;
 float temp_decimal = 0.0;
 int new_temp = 0;
-
 int desired_temp = 25;
-int temp_set = 1;
 
+// Global flags
+int temp_set = 1;
 int new_temp_lcd = 0;
 int new_data = 0;
-
 int heater_on = 0;
 int ac_on = 0;
 int is_setting = 0;
 
+// LCD device
 char row0_str1[] = "Temp: ";            // 6 characters
 char row0_str2[] = ".0C";               // 3 characters
 char row0_str3[] = ".5C";               // 3 characters
@@ -104,6 +112,11 @@ void set_signal(void)
 	sigaction(SIGINT, &sa, NULL);	
 }
 
+/**********************************************************************************
+ * @name      btn_read()       
+ * @brief      { Button value read thread. Polling, set new_btn flag to 1 when 
+ *               button is pressed and the state is stable (debounced). }
+ **********************************************************************************/
 void *btn_read(void *threadp)
 {
 	char btn_buf;	
@@ -153,6 +166,11 @@ void *btn_read(void *threadp)
 	pthread_exit((void *)0);
 }
 
+/**********************************************************************************
+ * @name      temp_read()       
+ * @brief      { Temperature read thread. Execute read function every 3 seconds
+ *               to get new temperature value. }
+ **********************************************************************************/
 void *temp_read(void *threadp)
 {
 	ssize_t ret_byte;
@@ -200,6 +218,11 @@ void *temp_read(void *threadp)
 	pthread_exit((void *)0);
 }
 
+/**********************************************************************************
+ * @name      lcd_write()       
+ * @brief      { LCD write thread. Update LCD screen with new information (New 
+ *               temperature value, new user settings). }
+ **********************************************************************************/
 void *lcd_write(void *threadp)
 {
 	ssize_t ret_byte;
@@ -280,6 +303,11 @@ void *lcd_write(void *threadp)
 	pthread_exit((void *)0);
 }	
 
+/**********************************************************************************
+ * @name      temp_control()       
+ * @brief      { Decide what actions needed based on user inputs and current 
+ *               temperature. }
+ **********************************************************************************/
 void temp_control(void)
 {
 	// Check which button is pressed and take actions
@@ -326,6 +354,9 @@ void temp_control(void)
 	}	
 }
 
+/**********************************************************************************
+ * @name       Main function       
+ **********************************************************************************/
 int main (int argc, char **argv)
 {
     int ret;	
@@ -340,7 +371,6 @@ int main (int argc, char **argv)
 	// Check daemon mode
 	if (argc == 2 && strcmp(argv[1], "-d") == 0) daemon_mode = 1;
 	
-
 	if (daemon_mode){
 		pid_t pid;
 	
